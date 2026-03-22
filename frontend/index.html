@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AQI Gò Vấp – Quan trắc không khí</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet.heat -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+
+  <!-- ═══ TOP NAV ═══ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <span class="logo-icon">🌫</span>
+        <span class="logo-text">AQI <strong>Gò Vấp</strong></span>
+      </div>
+      <div id="live-badge" class="live-badge">● LIVE</div>
+    </div>
+    <nav class="topbar-nav">
+      <button class="nav-btn active" data-view="map">🗺 Bản đồ</button>
+      <button class="nav-btn" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-btn" data-view="stations">📋 Trạm đo</button>
+      <button class="nav-btn" data-view="alerts">🚨 Cảnh báo</button>
+    </nav>
+    <div class="topbar-right">
+      <div id="global-aqi" class="global-aqi">–</div>
+      <span class="global-aqi-label" id="global-label">Đang tải...</span>
+    </div>
+  </header>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+
+      <!-- Ward filter -->
+      <div class="sidebar-section">
+        <div class="section-title">📍 Lọc theo phường</div>
+        <select id="ward-filter" class="select-full">
+          <option value="">Tất cả phường</option>
+        </select>
+        <a id="kmz-download" href="#" class="btn-secondary" style="display:none; margin-top:8px;" target="_blank">
+          📥 Tải KMZ phường
+        </a>
+      </div>
+
+      <!-- Layer controls -->
+      <div class="sidebar-section" id="map-controls">
+        <div class="section-title">🗂 Lớp bản đồ</div>
+        <label class="toggle-row">
+          <input type="checkbox" id="layer-stations" checked />
+          <span class="toggle-label">Trạm đo</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="layer-wards" checked />
+          <span class="toggle-label">Ranh giới phường</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="layer-heatmap" />
+          <span class="toggle-label">Heatmap IDW</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="layer-grid" />
+          <span class="toggle-label">Lưới nội suy</span>
+        </label>
+        <div class="section-title" style="margin-top:12px">⚙️ Phương pháp nội suy</div>
+        <select id="interp-method" class="select-full">
+          <option value="idw" selected>IDW (Inverse Distance Weighting)</option>
+          <option value="kriging">Kriging</option>
+        </select>
+        <button id="btn-interpolate" class="btn-primary">▶ Chạy nội suy</button>
+      </div>
+
+      <!-- AQI legend -->
+      <div class="sidebar-section">
+        <div class="section-title">🎨 Chú giải AQI</div>
+        <div class="legend">
+          <div class="legend-row"><span class="dot" style="background:#00e400"></span> 0–50 Tốt</div>
+          <div class="legend-row"><span class="dot" style="background:#ffff00"></span> 51–100 Trung bình</div>
+          <div class="legend-row"><span class="dot" style="background:#ff7e00"></span> 101–150 Kém</div>
+          <div class="legend-row"><span class="dot" style="background:#ff0000"></span> 151–200 Xấu</div>
+          <div class="legend-row"><span class="dot" style="background:#8f3f97"></span> 201–300 Rất xấu</div>
+          <div class="legend-row"><span class="dot" style="background:#7e0023"></span> >300 Nguy hiểm</div>
+        </div>
+      </div>
+
+      <!-- Add reading form -->
+      <div class="sidebar-section">
+        <div class="section-title">➕ Cập nhật đo lường</div>
+        <form id="reading-form">
+          <select id="form-station" class="select-full" required></select>
+          <div class="form-row2">
+            <div class="field">
+              <label>PM2.5 (µg/m³)</label>
+              <input type="number" id="form-pm25" min="0" max="999" step="0.1" placeholder="VD: 45.2" required />
+            </div>
+            <div class="field">
+              <label>PM10 (µg/m³)</label>
+              <input type="number" id="form-pm10" min="0" max="999" step="0.1" placeholder="VD: 80.5" />
+            </div>
+          </div>
+          <div class="form-row2">
+            <div class="field">
+              <label>Giao thông (0–10)</label>
+              <input type="number" id="form-traffic" min="0" max="10" value="3" />
+            </div>
+            <div class="field">
+              <label>Nhà máy (km)</label>
+              <input type="number" id="form-factory" min="0" step="0.1" value="2.0" />
+            </div>
+          </div>
+          <label class="toggle-row" style="margin-bottom:8px">
+            <input type="checkbox" id="form-construction" />
+            <span class="toggle-label">Có công trình xây dựng</span>
+          </label>
+          <input type="text" id="form-note" class="input-full" placeholder="Ghi chú..." />
+          <button type="submit" class="btn-primary" style="margin-top:8px">💾 Lưu đo lường</button>
+        </form>
+      </div>
+
+    </aside>
+
+    <!-- VIEWS -->
+    <div class="view-container">
+
+      <!-- MAP VIEW -->
+      <div id="view-map" class="view active">
+        <div id="map"></div>
+      </div>
+
+      <!-- DASHBOARD VIEW -->
+      <div id="view-dashboard" class="view">
+        <div class="dashboard-grid">
+          <div class="stat-cards" id="stat-cards"></div>
+          <div class="chart-card wide">
+            <div class="chart-title">📈 PM2.5 / PM10 theo thời gian</div>
+            <canvas id="chart-timeseries" height="120"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">🏙 AQI trung bình theo phường</div>
+            <canvas id="chart-ward-bar" height="200"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">🥧 Phân loại ngày</div>
+            <canvas id="chart-pie" height="200"></canvas>
+          </div>
+          <div class="chart-card wide">
+            <div class="chart-title">🏆 Top 5 trạm ô nhiễm nhất</div>
+            <table class="rank-table" id="rank-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Trạm</th>
+                  <th>Phường</th>
+                  <th>PM2.5</th>
+                  <th>PM10</th>
+                  <th>AQI</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATIONS VIEW -->
+      <div id="view-stations" class="view">
+        <div class="stations-toolbar">
+          <input type="text" id="stations-search" placeholder="🔍 Tìm theo tên, phường..." class="input-full"
+            style="max-width:320px" />
+          <select id="stations-ward-filter" class="select-full" style="max-width:200px">
+            <option value="">Tất cả phường</option>
+          </select>
+        </div>
+        <div class="stations-table-wrap">
+          <table class="stations-table" id="stations-table">
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Tên trạm</th>
+                <th>Phường</th>
+                <th>PM2.5</th>
+                <th>PM10</th>
+                <th>AQI</th>
+                <th>Trạng thái</th>
+                <th>Ghi chú</th>
+                <th>Cập nhật</th>
+              </tr>
+            </thead>
+            <tbody id="stations-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ALERTS VIEW -->
+      <div id="view-alerts" class="view">
+        <div class="alerts-header">
+          <h2>🚨 Cảnh báo chất lượng không khí</h2>
+          <p>Các trạm có AQI > 100 cần chú ý</p>
+        </div>
+        <div id="alerts-list" class="alerts-list"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/stations.js"></script>
+  <script src="js/alerts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>
