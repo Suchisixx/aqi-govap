@@ -146,3 +146,10 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
+
+class InterpolateRequest(BaseModel):
+    ward_id: Optional[int] = None
+    method: str = "idw"
+    resolution: int = 50
+    clip_to_ward: bool = True
+    per_ward: bool = True

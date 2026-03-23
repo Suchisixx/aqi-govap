@@ -142,7 +142,13 @@ async function runInterpolation() {
   btn.disabled = true;
 
   try {
-    const result = await api.interpolate(currentWardId, method);
+    const result = await api.interpolate({
+      ward_id: currentWardId || null,
+      method,
+      resolution: 50,
+      clip_to_ward: true,
+      per_ward: true,
+    });
 
     // Remove old layers
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }

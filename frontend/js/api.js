@@ -65,15 +65,20 @@ const api = {
     alerts: () => api.get('/dashboard/alerts'),
   },
 
-  interpolate: (wardId, method = 'idw') =>
-    api.post('/interpolate', { ward_id: wardId || null, method, resolution: 50 }),
+  interpolate: (wardId, method = 'idw') => api.post('/interpolate', {
+    ward_id: wardId || null,
+    method,
+    resolution: 50,
+    clip_to_ward: true,
+    per_ward: true,
+  }),
 };
 
 // ═══════════════════════════════════════════
 // AQI helpers
 // ═══════════════════════════════════════════
 function aqiColor(aqi) {
-  if (aqi <= 50)  return '#00e400';
+  if (aqi <= 50) return '#00e400';
   if (aqi <= 100) return '#ffff00';
   if (aqi <= 150) return '#ff7e00';
   if (aqi <= 200) return '#ff0000';
@@ -81,7 +86,7 @@ function aqiColor(aqi) {
   return '#7e0023';
 }
 function aqiLabel(aqi) {
-  if (aqi <= 50)  return 'Tốt';
+  if (aqi <= 50) return 'Tốt';
   if (aqi <= 100) return 'Trung bình';
   if (aqi <= 150) return 'Kém';
   if (aqi <= 200) return 'Xấu';
@@ -132,6 +137,6 @@ function connectWS() {
       if (msg.event && wsEvents[msg.event]) wsEvents[msg.event](msg.data);
       // Generic refresh trigger
       if (msg.event && wsEvents['__any__']) wsEvents['__any__'](msg);
-    } catch {}
+    } catch { }
   };
 }

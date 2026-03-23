@@ -348,6 +348,11 @@ docker-compose restart db
 - Kiểm tra CORS settings
 - Xem console browser cho lỗi JS
 
+### Các url server : 
+http://localhost:3000
+http://localhost:8000/docs
+http://localhost:8000/api/wards/geojson
+
 ### Nội suy không hoạt động
 
 - Đảm bảo có ít nhất 3 trạm có dữ liệu
