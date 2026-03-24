@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 import os
+import json
 from app.database import database
 
 router = APIRouter()
@@ -37,9 +38,12 @@ async def get_wards_geojson():
     """)
     features = []
     for r in rows:
+        geometry = r["geometry"]
+        if isinstance(geometry, str):
+            geometry = json.loads(geometry)
         features.append({
             "type": "Feature",
-            "geometry": r["geometry"],
+            "geometry": geometry,
             "properties": {
                 "id": r["id"],
                 "code": r["code"],

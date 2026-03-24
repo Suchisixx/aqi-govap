@@ -82,6 +82,7 @@
           <option value="kriging">Kriging</option>
         </select>
         <button id="btn-interpolate" class="btn-primary">▶ Chạy nội suy</button>
+        <div id="interp-warning" class="muted-text"></div>
       </div>
 
       <!-- AQI legend -->
@@ -101,7 +102,8 @@
       <div class="sidebar-section">
         <div class="section-title">➕ Cập nhật đo lường</div>
         <form id="reading-form">
-          <select id="form-station" class="select-full" required></select>
+          <label class="field-label">Trạm đo</label>
+          <select id="station-select" class="select-full" required></select>
           <div class="form-row2">
             <div class="field">
               <label>PM2.5 (µg/m³)</label>

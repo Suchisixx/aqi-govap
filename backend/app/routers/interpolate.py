@@ -113,9 +113,13 @@ async def interpolate(body: InterpolateRequest):
             {"wid": body.ward_id},
         )
 
+        ward_geom = json.loads(ward_row["ward_geom"]) if ward_row["ward_geom"] else None
+        if not ward_geom:
+            raise HTTPException(400, "Phường chưa có hình học (geom), không thể nội suy")
+
         result = await interpolate_single_zone(
             rows=rows,
-            ward_geom=json.loads(ward_row["ward_geom"]) if ward_row["ward_geom"] else None,
+            ward_geom=ward_geom,
             lat_min=float(ward_row["lat_min"]),
             lat_max=float(ward_row["lat_max"]),
             lng_min=float(ward_row["lng_min"]),
@@ -124,13 +128,17 @@ async def interpolate(body: InterpolateRequest):
         )
 
         if result["station_count"] < 2:
-            raise HTTPException(400, "Cần ít nhất 2 trạm để nội suy trong phường này")
+            raise HTTPException(
+                400,
+                f"Phường '{ward_row['name']}' chỉ có {result['station_count']} trạm. Cần ít nhất 2 trạm để nội suy.",
+            )
 
         return {
             "method": body.method,
             "mode": "single_ward",
             "ward_id": ward_row["id"],
             "ward_name": ward_row["name"],
+            "warnings": [],
             **result,
         }
 
@@ -154,7 +162,9 @@ async def interpolate(body: InterpolateRequest):
         all_heat = []
         all_features = []
         ward_summaries = []
+        skipped_wards = []
         total_station_count = 0
+        processed_ward_count = 0
 
         for ward in ward_rows:
             rows = await database.fetch_all(
@@ -166,6 +176,14 @@ async def interpolate(body: InterpolateRequest):
                 """,
                 {"wid": ward["id"]},
             )
+
+            if len(rows) < 2:
+                skipped_wards.append({
+                    "ward_id": ward["id"],
+                    "ward_name": ward["name"],
+                    "reason": f"Chỉ có {len(rows)} trạm có AQI.",
+                })
+                continue
 
             zone_result = await interpolate_single_zone(
                 rows=rows,
@@ -180,6 +198,7 @@ async def interpolate(body: InterpolateRequest):
             all_heat.extend(zone_result["heatmap_points"])
             all_features.extend(zone_result["geojson"]["features"])
             total_station_count += zone_result["station_count"]
+            processed_ward_count += 1
 
             ward_summaries.append({
                 "ward_id": ward["id"],
@@ -188,8 +207,14 @@ async def interpolate(body: InterpolateRequest):
                 "bbox": zone_result["bbox"],
             })
 
-        if total_station_count < 2:
-            raise HTTPException(400, "Cần ít nhất 2 trạm để nội suy")
+        if processed_ward_count == 0:
+            raise HTTPException(
+                400,
+                {
+                    "message": "Không có phường nào đủ điều kiện nội suy (mỗi phường cần >= 2 trạm có AQI).",
+                    "skipped_wards": skipped_wards,
+                },
+            )
 
         return {
             "method": body.method,
@@ -201,6 +226,7 @@ async def interpolate(body: InterpolateRequest):
                 "features": all_features,
             },
             "wards": ward_summaries,
+            "warnings": skipped_wards,
         }
 
     rows = await database.fetch_all(

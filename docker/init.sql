@@ -54,96 +54,20 @@ CREATE INDEX IF NOT EXISTS idx_readings_station ON readings(station_id);
 -- SEED: 6 wards (approximate polygons for Gò Vấp area)
 -- =============================================
 INSERT INTO wards (code, name, geom, kmz_path)
-VALUES (
-        'HT',
-        'Hạnh Thông',
-        ST_GeomFromText(
-            'POLYGON((
-    106.6800 10.8240,
-    106.6880 10.8240,
-    106.6880 10.8300,
-    106.6800 10.8300,
-    106.6800 10.8240
-))',
-            4326
-        ),
-        'HT.kmz'
-    ),
-    (
-        'AN',
-        'An Nhơn',
-        ST_GeomFromText(
-            'POLYGON((
-    106.6760 10.8340,
-    106.6860 10.8340,
-    106.6860 10.8420,
-    106.6760 10.8420,
-    106.6760 10.8340
-))',
-            4326
-        ),
-        'AN.kmz'
-    ),
-    (
-        'GV',
-        'Gò Vấp',
-        ST_GeomFromText(
-            'POLYGON((
-    106.6820 10.8260,
-    106.6930 10.8260,
-    106.6930 10.8330,
-    106.6820 10.8330,
-    106.6820 10.8260
-))',
-            4326
-        ),
-        'GV.kmz'
-    ),
-    (
-        'AHD',
-        'An Hội Đông',
-        ST_GeomFromText(
-            'POLYGON((
-    106.6860 10.8190,
-    106.6960 10.8190,
-    106.6960 10.8270,
-    106.6860 10.8270,
-    106.6860 10.8190
-))',
-            4326
-        ),
-        'AHD.kmz'
-    ),
+VALUES ('HT', 'Hạnh Thông', NULL, 'Hạnh Thông.kmz'),
+    ('AN', 'An Nhơn', NULL, 'An Nhơn.kmz'),
+    ('GV', 'Gò Vấp', NULL, 'Gò Vấp.kmz'),
+    ('AHD', 'An Hội Đông', NULL, 'An Hội Đông.kmz'),
     (
         'TTH',
         'Thông Tây Hội',
-        ST_GeomFromText(
-            'POLYGON((
-    106.6620 10.8260,
-    106.6740 10.8260,
-    106.6740 10.8350,
-    106.6620 10.8350,
-    106.6620 10.8260
-))',
-            4326
-        ),
-        'TTH.kmz'
+        NULL,
+        'Thông Tây Hội.kmz'
     ),
-    (
-        'AHT',
-        'An Hội Tây',
-        ST_GeomFromText(
-            'POLYGON((
-    106.6510 10.8110,
-    106.6630 10.8110,
-    106.6630 10.8210,
-    106.6510 10.8210,
-    106.6510 10.8110
-))',
-            4326
-        ),
-        'AHT.kmz'
-    ) ON CONFLICT (code) DO NOTHING;
+    ('AHT', 'An Hội Tây', NULL, 'An Hội Tây.kmz') ON CONFLICT (code) DO
+UPDATE
+SET name = EXCLUDED.name,
+    kmz_path = EXCLUDED.kmz_path;
 -- =============================================
 -- SEED: 12 stations
 -- =============================================

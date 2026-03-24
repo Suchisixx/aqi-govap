@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 
 
@@ -123,9 +123,11 @@ class ReadingOut(BaseModel):
 
 
 class InterpolateRequest(BaseModel):
-    ward_id: Optional[int] = None  # None = tất cả
-    method: str = "idw"            # "idw" | "kriging"
-    resolution: int = 50           # grid points per axis
+    ward_id: Optional[int] = None
+    method: Literal["idw", "kriging"] = "idw"
+    resolution: int = Field(default=50, ge=20, le=200)
+    clip_to_ward: bool = True
+    per_ward: bool = True
 
 
 class WardOut(BaseModel):
@@ -146,10 +148,3 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
-
-class InterpolateRequest(BaseModel):
-    ward_id: Optional[int] = None
-    method: str = "idw"
-    resolution: int = 50
-    clip_to_ward: bool = True
-    per_ward: bool = True

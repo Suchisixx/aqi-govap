@@ -1,39 +1,76 @@
-import zipfile
-from fastkml import kml
-from shapely.ops import unary_union
+import os
+import asyncio
+import unicodedata
+from app.database import database
+from app.services.kmz_loader import read_kmz_geometry
 
-def extract_kml_from_kmz(kmz_path):
-    with zipfile.ZipFile(kmz_path, "r") as z:
-        for name in z.namelist():
-            if name.lower().endswith(".kml"):
-                return z.read(name)
-    raise Exception(f"No KML found in {kmz_path}")
+KMZ_DIR = "/app/app/kmz"
 
-def collect_geometries(features):
-    geoms = []
+WARD_MAPPING = {
+    "Hạnh Thông.kmz": "Hạnh Thông",
+    "An Nhơn.kmz": "An Nhơn",
+    "Gò Vấp.kmz": "Gò Vấp",
+    "An Hội Đông.kmz": "An Hội Đông",
+    "Thông Tây Hội.kmz": "Thông Tây Hội",
+    "An Hội Tây.kmz": "An Hội Tây",
+}
 
-    for f in features:
-        geom = getattr(f, "geometry", None)
-        if geom is not None:
-            geoms.append(geom)
+def norm_text(s: str) -> str:
+    return unicodedata.normalize("NFC", s).strip()
 
-        child_features = getattr(f, "features", None)
-        if child_features:
-            geoms.extend(collect_geometries(list(child_features)))
+async def main():
+    await database.connect()
 
-    return geoms
+    try:
+        actual_files = os.listdir(KMZ_DIR)
+        print("Files trong thư mục kmz:")
+        for f in actual_files:
+            print(" -", repr(f))
 
-def read_kmz_geometry(kmz_path):
-    kml_bytes = extract_kml_from_kmz(kmz_path)
+        normalized_actual = {
+            norm_text(filename): filename
+            for filename in actual_files
+            if filename.lower().endswith(".kmz")
+        }
 
-    k = kml.KML()
-    k.from_string(kml_bytes)
+        success_count = 0
+        fail_count = 0
 
-    root_features = list(k.features)
-    geoms = collect_geometries(root_features)
+        for expected_filename, ward_name in WARD_MAPPING.items():
+            normalized_expected = norm_text(expected_filename)
 
-    if not geoms:
-        raise Exception(f"No geometry found in {kmz_path}")
+            if normalized_expected not in normalized_actual:
+                print(f"[SKIP] Không tìm thấy file: {expected_filename}")
+                continue
 
-    merged = unary_union(geoms)
-    return merged
+            real_filename = normalized_actual[normalized_expected]
+            path = os.path.join(KMZ_DIR, real_filename)
+
+            try:
+                print(f"Đang import {real_filename} -> {ward_name}")
+                geom = read_kmz_geometry(path)
+
+                await database.execute(
+                    """
+                    UPDATE wards
+                    SET geom = ST_Multi(ST_GeomFromText(:wkt, 4326))
+                    WHERE name = :name
+                    """,
+                    {
+                        "wkt": geom.wkt,
+                        "name": ward_name,
+                    },
+                )
+                print(f"[OK] {ward_name}")
+                success_count += 1
+            except Exception as ex:
+                print(f"[ERROR] {real_filename} ({ward_name}): {ex}")
+                fail_count += 1
+
+        print(f"Import hoàn tất. Thành công: {success_count}, lỗi: {fail_count}")
+
+    finally:
+        await database.disconnect()
+
+if __name__ == "__main__":
+    asyncio.run(main())
