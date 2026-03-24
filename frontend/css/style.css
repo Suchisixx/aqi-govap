@@ -595,8 +595,10 @@ body {
 }
 
 .ward-tooltip {
-  white-space: pre-line;
+  white-space: nowrap;
   font-weight: 600;
+  max-width: none;
+  min-width: 220px;
 }
 
 ::-webkit-scrollbar {

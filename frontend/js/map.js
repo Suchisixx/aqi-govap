@@ -72,7 +72,7 @@ function renderWards() {
     onEachFeature: (feature, leafletLayer) => {
       const p = feature.properties || {};
       const avg = p.avg_aqi != null ? Math.round(p.avg_aqi) : '–';
-      leafletLayer.bindTooltip(`${p.name || 'Phường'}\nAQI TB: ${avg}`, {
+      leafletLayer.bindTooltip(`${p.name || 'Phường'} · AQI trung bình: ${avg}`, {
         sticky: true,
         className: 'ward-tooltip',
       });

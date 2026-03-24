@@ -149,16 +149,16 @@ def heatmap_points(
     """Return [lat, lng, intensity] for Leaflet.heat plugin"""
     pts = []
 
-    valid = values[~np.isnan(values)]
-    max_val = valid.max() if valid.size > 0 and valid.max() > 0 else 1
-
     for i in range(grid_lats.shape[0]):
         for j in range(grid_lngs.shape[1]):
             val = values[i, j]
             if np.isnan(val):
                 continue
 
-            intensity = float(val) / max_val
+            # Use absolute AQI scale so "good" areas don't look bad just because
+            # another ward has a higher local max.
+            clamped = float(max(0.0, min(500.0, val)))
+            intensity = clamped / 500.0
             pts.append([
                 float(grid_lats[i, j]),
                 float(grid_lngs[i, j]),
