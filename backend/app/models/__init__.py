@@ -1,74 +1,98 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Literal
 from datetime import datetime
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, Field
 
 
-# ─── AQI Calculation ─────────────────────────────────────────────────────────
+AQI_INDEX_BREAKPOINTS = [0, 50, 100, 150, 200, 300, 400, 500]
+PM25_BREAKPOINTS = [0, 25, 50, 80, 150, 250, 350, 500]
+PM10_BREAKPOINTS = [0, 50, 150, 250, 350, 420, 500, 600]
+
+
+def _linear_interp(value: float, concentration_breakpoints: list[float]) -> int:
+    if value is None:
+        return 0
+
+    bounded_value = max(0.0, float(value))
+
+    for idx in range(len(concentration_breakpoints) - 1):
+        c_low = concentration_breakpoints[idx]
+        c_high = concentration_breakpoints[idx + 1]
+        i_low = AQI_INDEX_BREAKPOINTS[idx]
+        i_high = AQI_INDEX_BREAKPOINTS[idx + 1]
+
+        if bounded_value <= c_high:
+            if c_high == c_low:
+                return int(round(i_high))
+            aqi = ((i_high - i_low) / (c_high - c_low)) * (bounded_value - c_low) + i_low
+            return int(round(aqi))
+
+    return AQI_INDEX_BREAKPOINTS[-1]
+
 
 def calc_aqi_pm25(pm25: float) -> int:
-    """QCVN 05:2021/BTNMT breakpoints for PM2.5 (24h avg, µg/m³)"""
-    breakpoints = [
-        (0,    12.0,  0,   50),
-        (12.1, 35.4,  51,  100),
-        (35.5, 55.4,  101, 150),
-        (55.5, 150.4, 151, 200),
-        (150.5,250.4, 201, 300),
-        (250.5,350.4, 301, 400),
-        (350.5,500.4, 401, 500),
-    ]
-    return _linear_interp(pm25, breakpoints)
+    return _linear_interp(pm25, PM25_BREAKPOINTS)
 
 
 def calc_aqi_pm10(pm10: float) -> int:
-    """QCVN 05:2021/BTNMT breakpoints for PM10 (24h avg, µg/m³)"""
-    breakpoints = [
-        (0,    54,   0,   50),
-        (55,   154,  51,  100),
-        (155,  254,  101, 150),
-        (255,  354,  151, 200),
-        (355,  424,  201, 300),
-        (425,  504,  301, 400),
-        (505,  604,  401, 500),
-    ]
-    return _linear_interp(pm10, breakpoints)
+    return _linear_interp(pm10, PM10_BREAKPOINTS)
 
 
-def _linear_interp(conc: float, breakpoints: list) -> int:
-    for (c_lo, c_hi, i_lo, i_hi) in breakpoints:
-        if c_lo <= conc <= c_hi:
-            aqi = ((i_hi - i_lo) / (c_hi - c_lo)) * (conc - c_lo) + i_lo
-            return round(aqi)
-    return 500  # beyond scale
+def calc_aqi_details(pm25: Optional[float], pm10: Optional[float]) -> dict:
+    sub_indices = {}
+
+    if pm25 is not None:
+        sub_indices["pm25"] = calc_aqi_pm25(pm25)
+    if pm10 is not None:
+        sub_indices["pm10"] = calc_aqi_pm10(pm10)
+
+    if not sub_indices:
+        overall = 0
+        primary_pollutant = None
+    else:
+        primary_pollutant, overall = max(sub_indices.items(), key=lambda item: item[1])
+
+    return {
+        "aqi": overall,
+        "aqi_pm25": sub_indices.get("pm25"),
+        "aqi_pm10": sub_indices.get("pm10"),
+        "primary_pollutant": primary_pollutant,
+        "aqi_color": aqi_color(overall),
+        "aqi_label": aqi_label(overall),
+    }
 
 
 def calc_aqi(pm25: Optional[float], pm10: Optional[float]) -> int:
-    values = []
-    if pm25 is not None:
-        values.append(calc_aqi_pm25(pm25))
-    if pm10 is not None:
-        values.append(calc_aqi_pm10(pm10))
-    return max(values) if values else 0
+    return calc_aqi_details(pm25, pm10)["aqi"]
 
 
 def aqi_color(aqi: int) -> str:
-    if aqi <= 50:   return "#00e400"   # Tốt
-    if aqi <= 100:  return "#ffff00"   # Trung bình
-    if aqi <= 150:  return "#ff7e00"   # Kém
-    if aqi <= 200:  return "#ff0000"   # Xấu
-    if aqi <= 300:  return "#8f3f97"   # Rất xấu
-    return "#7e0023"                   # Nguy hiểm
+    if aqi <= 50:
+        return "#00e400"
+    if aqi <= 100:
+        return "#ffff00"
+    if aqi <= 150:
+        return "#ff7e00"
+    if aqi <= 200:
+        return "#ff0000"
+    if aqi <= 300:
+        return "#8f3f97"
+    return "#7e0023"
 
 
 def aqi_label(aqi: int) -> str:
-    if aqi <= 50:   return "Tốt"
-    if aqi <= 100:  return "Trung bình"
-    if aqi <= 150:  return "Kém"
-    if aqi <= 200:  return "Xấu"
-    if aqi <= 300:  return "Rất xấu"
-    return "Nguy hiểm"
+    if aqi <= 50:
+        return "Tot"
+    if aqi <= 100:
+        return "Trung binh"
+    if aqi <= 150:
+        return "Kem"
+    if aqi <= 200:
+        return "Xau"
+    if aqi <= 300:
+        return "Rat xau"
+    return "Nguy hai"
 
-
-# ─── Pydantic Schemas ─────────────────────────────────────────────────────────
 
 class StationCreate(BaseModel):
     code: str
@@ -105,6 +129,9 @@ class StationOut(BaseModel):
     pm25: Optional[float]
     pm10: Optional[float]
     aqi: Optional[int]
+    aqi_pm25: Optional[int] = None
+    aqi_pm10: Optional[int] = None
+    primary_pollutant: Optional[str] = None
     aqi_color: Optional[str]
     aqi_label: Optional[str]
     timestamp: datetime
@@ -148,3 +175,53 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+
+
+class AlertThresholdsOut(BaseModel):
+    aqi_warning: int
+    aqi_danger: int
+    pm25_warning: float
+    pm10_warning: float
+    consecutive_readings: int
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+
+class AlertThresholdsUpdate(BaseModel):
+    aqi_warning: int = Field(ge=1, le=500)
+    aqi_danger: int = Field(ge=1, le=500)
+    pm25_warning: float = Field(ge=0)
+    pm10_warning: float = Field(ge=0)
+    consecutive_readings: int = Field(ge=1, le=24)
+
+
+class StationImportRow(BaseModel):
+    code: str
+    name: str
+    ward_id: Optional[int] = None
+    ward_code: Optional[str] = None
+    lat: float
+    lng: float
+    pm25: Optional[float] = None
+    pm10: Optional[float] = None
+    traffic_level: int = Field(default=0, ge=0, le=10)
+    construction: bool = False
+    factory_near: float = 0.0
+    note: Optional[str] = None
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    action: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime

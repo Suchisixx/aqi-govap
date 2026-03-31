@@ -2,6 +2,7 @@ services:
   db:
     image: postgis/postgis:15-3.3
     container_name: aqi_db
+    hostname: db
     environment:
       POSTGRES_DB: aqi_gv
       POSTGRES_USER: aqi_user
@@ -16,6 +17,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      default:
+        aliases:
+          - db
+          - aqi_db
+          - postgres
 
   backend:
     build: ./backend

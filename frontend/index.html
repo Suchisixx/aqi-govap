@@ -4,62 +4,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AQI Gò Vấp – Quan trắc không khí</title>
+  <title>AQI Gò Vấp - Quan trắc không khí</title>
 
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Leaflet.heat -->
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <link rel="stylesheet" href="css/style.css" />
 </head>
 
 <body>
-
-  <!-- ═══ TOP NAV ═══ -->
   <header class="topbar">
     <div class="topbar-left">
       <div class="logo">
-        <span class="logo-icon">🌫</span>
-        <span class="logo-text">AQI <strong>Gò Vấp</strong></span>
+        <span class="logo-icon">AQI</span>
+        <span class="logo-text">Gò Vấp <strong>Air Monitor</strong></span>
       </div>
-      <div id="live-badge" class="live-badge">● LIVE</div>
+      <div id="live-badge" class="live-badge">LIVE</div>
     </div>
+
     <nav class="topbar-nav">
-      <button class="nav-btn active" data-view="map">🗺 Bản đồ</button>
-      <button class="nav-btn" data-view="dashboard">📊 Dashboard</button>
-      <button class="nav-btn" data-view="stations">📋 Trạm đo</button>
-      <button class="nav-btn" data-view="alerts">🚨 Cảnh báo</button>
+      <button class="nav-btn active" data-view="map">Bản đồ</button>
+      <button class="nav-btn" data-view="dashboard">Dashboard</button>
+      <button class="nav-btn" data-view="stations">Trạm đo</button>
+      <button class="nav-btn" data-view="alerts">Cảnh báo</button>
     </nav>
+
     <div class="topbar-right">
-      <div id="global-aqi" class="global-aqi">–</div>
+      <button id="btn-export" class="export-btn" type="button">Xuất báo cáo PDF</button>
+      <div class="auth-box">
+        <div id="auth-status" class="auth-status">Chưa đăng nhập</div>
+        <form id="login-form" class="auth-actions">
+          <input id="login-username" class="topbar-input" type="text" placeholder="Tài khoản" value="admin" autocomplete="username" />
+          <input id="login-password" class="topbar-input" type="password" placeholder="Mật khẩu" value="123" autocomplete="current-password" />
+          <button id="login-btn" class="topbar-btn" type="submit">Đăng nhập</button>
+          <button id="logout-btn" class="topbar-btn secondary" type="button" style="display:none">Đăng xuất</button>
+        </form>
+      </div>
+      <div id="global-aqi" class="global-aqi">-</div>
       <span class="global-aqi-label" id="global-label">Đang tải...</span>
     </div>
   </header>
 
-  <!-- ═══ MAIN ═══ -->
   <main class="layout">
-
-    <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
+      <div class="sidebar-section sidebar-hero">
+        <div class="hero-kicker">Quan trắc thời gian thực</div>
+        <h1>Giám sát AQI theo phường tại Gò Vấp</h1>
+        <p>Theo dõi nhanh bản đồ, xu hướng, cảnh báo và lịch sử đo ngay trên một giao diện gọn gàng.</p>
+      </div>
 
-      <!-- Ward filter -->
       <div class="sidebar-section">
-        <div class="section-title">📍 Lọc theo phường</div>
+        <div class="section-title">Lọc theo phường</div>
         <select id="ward-filter" class="select-full">
           <option value="">Tất cả phường</option>
         </select>
         <a id="kmz-download" href="#" class="btn-secondary" style="display:none; margin-top:8px;" target="_blank">
-          📥 Tải KMZ phường
+          Tải KMZ phường
         </a>
       </div>
 
-      <!-- Layer controls -->
       <div class="sidebar-section" id="map-controls">
-        <div class="section-title">🗂 Lớp bản đồ</div>
+        <div class="section-title">Lớp bản đồ</div>
         <label class="toggle-row">
           <input type="checkbox" id="layer-stations" checked />
           <span class="toggle-label">Trạm đo</span>
@@ -70,53 +79,51 @@
         </label>
         <label class="toggle-row">
           <input type="checkbox" id="layer-heatmap" />
-          <span class="toggle-label">Heatmap IDW</span>
+          <span class="toggle-label">Bản đồ nhiệt AQI</span>
         </label>
         <label class="toggle-row">
           <input type="checkbox" id="layer-grid" />
           <span class="toggle-label">Lưới nội suy</span>
         </label>
-        <div class="section-title" style="margin-top:12px">⚙️ Phương pháp nội suy</div>
+        <div class="section-title" style="margin-top:12px">Phương pháp nội suy</div>
         <select id="interp-method" class="select-full">
-          <option value="idw" selected>IDW (Inverse Distance Weighting)</option>
+          <option value="idw" selected>IDW</option>
           <option value="kriging">Kriging</option>
         </select>
-        <button id="btn-interpolate" class="btn-primary">▶ Chạy nội suy</button>
+        <button id="btn-interpolate" class="btn-primary">Chạy nội suy</button>
         <div id="interp-warning" class="muted-text"></div>
       </div>
 
-      <!-- AQI legend -->
       <div class="sidebar-section">
-        <div class="section-title">🎨 Chú giải AQI</div>
+        <div class="section-title">Chú giải AQI</div>
         <div class="legend">
-          <div class="legend-row"><span class="dot" style="background:#00e400"></span> 0–50 Tốt</div>
-          <div class="legend-row"><span class="dot" style="background:#ffff00"></span> 51–100 Trung bình</div>
-          <div class="legend-row"><span class="dot" style="background:#ff7e00"></span> 101–150 Kém</div>
-          <div class="legend-row"><span class="dot" style="background:#ff0000"></span> 151–200 Xấu</div>
-          <div class="legend-row"><span class="dot" style="background:#8f3f97"></span> 201–300 Rất xấu</div>
-          <div class="legend-row"><span class="dot" style="background:#7e0023"></span> >300 Nguy hiểm</div>
+          <div class="legend-row"><span class="dot" style="background:#00e400"></span>0-50 Tốt</div>
+          <div class="legend-row"><span class="dot" style="background:#ffff00"></span>51-100 Trung bình</div>
+          <div class="legend-row"><span class="dot" style="background:#ff7e00"></span>101-150 Kém</div>
+          <div class="legend-row"><span class="dot" style="background:#ff0000"></span>151-200 Xấu</div>
+          <div class="legend-row"><span class="dot" style="background:#8f3f97"></span>201-300 Rất xấu</div>
+          <div class="legend-row"><span class="dot" style="background:#7e0023"></span>&gt;300 Nguy hại</div>
         </div>
       </div>
 
-      <!-- Add reading form -->
       <div class="sidebar-section">
-        <div class="section-title">➕ Cập nhật đo lường</div>
+        <div class="section-title">Cập nhật đo lường</div>
         <form id="reading-form">
           <label class="field-label">Trạm đo</label>
           <select id="station-select" class="select-full" required></select>
           <div class="form-row2">
             <div class="field">
-              <label>PM2.5 (µg/m³)</label>
-              <input type="number" id="form-pm25" min="0" max="999" step="0.1" placeholder="VD: 45.2" required />
+              <label>PM2.5</label>
+              <input type="number" id="form-pm25" min="0" max="999" step="0.1" placeholder="45.2" required />
             </div>
             <div class="field">
-              <label>PM10 (µg/m³)</label>
-              <input type="number" id="form-pm10" min="0" max="999" step="0.1" placeholder="VD: 80.5" />
+              <label>PM10</label>
+              <input type="number" id="form-pm10" min="0" max="999" step="0.1" placeholder="80.5" />
             </div>
           </div>
           <div class="form-row2">
             <div class="field">
-              <label>Giao thông (0–10)</label>
+              <label>Giao thông (0-10)</label>
               <input type="number" id="form-traffic" min="0" max="10" value="3" />
             </div>
             <div class="field">
@@ -129,38 +136,59 @@
             <span class="toggle-label">Có công trình xây dựng</span>
           </label>
           <input type="text" id="form-note" class="input-full" placeholder="Ghi chú..." />
-          <button type="submit" class="btn-primary" style="margin-top:8px">💾 Lưu đo lường</button>
+          <button type="submit" class="btn-primary" style="margin-top:8px">Lưu đo lường</button>
         </form>
       </div>
 
+      <div class="sidebar-section">
+        <div class="section-title">Nhập dữ liệu</div>
+        <input id="import-file" class="input-full" type="file" accept=".csv,.xlsx" />
+        <div class="muted-text">Cột bắt buộc: <strong>code, name, lat, lng</strong> và thêm <strong>ward_id</strong> hoặc <strong>ward_code</strong>.</div>
+        <button id="btn-import" class="btn-primary" type="button">Import CSV/XLSX</button>
+        <div id="import-result" class="muted-text"></div>
+      </div>
     </aside>
 
-    <!-- VIEWS -->
     <div class="view-container">
-
-      <!-- MAP VIEW -->
       <div id="view-map" class="view active">
         <div id="map"></div>
       </div>
 
-      <!-- DASHBOARD VIEW -->
       <div id="view-dashboard" class="view">
+        <div class="dashboard-controls">
+          <select id="dashboard-ward-filter" class="select-full">
+            <option value="">Tất cả phường</option>
+          </select>
+          <select id="dashboard-hours" class="select-full">
+            <option value="6">6 giờ</option>
+            <option value="24" selected>24 giờ</option>
+            <option value="72">3 ngày</option>
+            <option value="168">7 ngày</option>
+            <option value="720">30 ngày</option>
+          </select>
+          <select id="dashboard-bucket" class="select-full">
+            <option value="hour" selected>Theo giờ</option>
+            <option value="day">Theo ngày</option>
+          </select>
+          <button id="btn-dashboard-refresh" class="topbar-btn" type="button">Làm mới</button>
+        </div>
         <div class="dashboard-grid">
           <div class="stat-cards" id="stat-cards"></div>
+          <div class="trend-cards" id="trend-cards"></div>
           <div class="chart-card wide">
-            <div class="chart-title">📈 PM2.5 / PM10 theo thời gian</div>
+            <div class="chart-title">PM2.5 / PM10 theo thời gian</div>
             <canvas id="chart-timeseries" height="120"></canvas>
           </div>
           <div class="chart-card">
-            <div class="chart-title">🏙 AQI trung bình theo phường</div>
+            <div class="chart-title">AQI trung bình theo phường</div>
             <canvas id="chart-ward-bar" height="200"></canvas>
           </div>
           <div class="chart-card">
-            <div class="chart-title">🥧 Phân loại ngày</div>
+            <div class="chart-title">Phân bố mức cảnh báo</div>
             <canvas id="chart-pie" height="200"></canvas>
           </div>
           <div class="chart-card wide">
-            <div class="chart-title">🏆 Top 5 trạm ô nhiễm nhất</div>
+            <div class="chart-title">Top 5 trạm có AQI cao nhất</div>
             <table class="rank-table" id="rank-table">
               <thead>
                 <tr>
@@ -179,13 +207,17 @@
         </div>
       </div>
 
-      <!-- STATIONS VIEW -->
       <div id="view-stations" class="view">
         <div class="stations-toolbar">
-          <input type="text" id="stations-search" placeholder="🔍 Tìm theo tên, phường..." class="input-full"
+          <input type="text" id="stations-search" placeholder="Tìm theo tên, mã, phường..." class="input-full"
             style="max-width:320px" />
-          <select id="stations-ward-filter" class="select-full" style="max-width:200px">
+          <select id="stations-ward-filter" class="select-full" style="max-width:220px">
             <option value="">Tất cả phường</option>
+          </select>
+          <select id="stations-hours-filter" class="select-full" style="max-width:180px">
+            <option value="24">24 giờ</option>
+            <option value="72" selected>3 ngày</option>
+            <option value="168">7 ngày</option>
           </select>
         </div>
         <div class="stations-table-wrap">
@@ -201,26 +233,69 @@
                 <th>Trạng thái</th>
                 <th>Ghi chú</th>
                 <th>Cập nhật</th>
+                <th>Chi tiết</th>
               </tr>
             </thead>
             <tbody id="stations-tbody"></tbody>
           </table>
         </div>
+        <div class="station-detail-shell" hidden>
+          <div class="station-detail-header">
+            <div>
+              <h2 id="station-detail-title">Chi tiết trạm</h2>
+              <p id="station-detail-subtitle">Chọn một trạm trong bảng để xem lịch sử PM2.5, PM10 và AQI.</p>
+            </div>
+            <div class="station-detail-actions">
+              <button id="btn-station-refresh" class="topbar-btn" type="button">Tải lại chi tiết</button>
+              <button id="btn-station-close" class="topbar-btn secondary" type="button">Đóng</button>
+            </div>
+          </div>
+          <div class="station-detail-metrics" id="station-detail-metrics"></div>
+          <div class="station-detail-grid">
+            <div class="chart-card">
+              <div class="chart-title">Lịch sử PM2.5 / PM10</div>
+              <canvas id="chart-station-detail" height="160"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- ALERTS VIEW -->
       <div id="view-alerts" class="view">
         <div class="alerts-header">
-          <h2>🚨 Cảnh báo chất lượng không khí</h2>
-          <p>Các trạm có AQI > 100 cần chú ý</p>
+          <h2>Cảnh báo chất lượng không khí</h2>
+          <p>Các trạm vượt ngưỡng AQI, PM2.5 hoặc PM10 sẽ hiển thị tại đây.</p>
+        </div>
+        <div class="threshold-card">
+          <div class="threshold-grid">
+            <div class="field">
+              <label>AQI cảnh báo</label>
+              <input type="number" id="threshold-aqi-warning" min="1" max="500" />
+            </div>
+            <div class="field">
+              <label>AQI nguy hiểm</label>
+              <input type="number" id="threshold-aqi-danger" min="1" max="500" />
+            </div>
+            <div class="field">
+              <label>PM2.5 cảnh báo</label>
+              <input type="number" id="threshold-pm25-warning" min="0" step="0.1" />
+            </div>
+            <div class="field">
+              <label>PM10 cảnh báo</label>
+              <input type="number" id="threshold-pm10-warning" min="0" step="0.1" />
+            </div>
+            <div class="field">
+              <label>Số lần liên tiếp</label>
+              <input type="number" id="threshold-consecutive" min="1" max="24" />
+            </div>
+            <button id="btn-save-thresholds" class="btn-primary" type="button">Lưu ngưỡng cảnh báo</button>
+          </div>
+          <div id="threshold-note" class="muted-text"></div>
         </div>
         <div id="alerts-list" class="alerts-list"></div>
       </div>
-
     </div>
   </main>
 
-  <!-- TOAST -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="js/api.js"></script>

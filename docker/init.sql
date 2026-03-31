@@ -45,11 +45,32 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) DEFAULT 'viewer' CHECK (role IN ('admin', 'officer', 'viewer')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    username VARCHAR(50),
+    action VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id INT,
+    details JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS alert_thresholds (
+    id INT PRIMARY KEY,
+    aqi_warning INT NOT NULL DEFAULT 100,
+    aqi_danger INT NOT NULL DEFAULT 150,
+    pm25_warning FLOAT NOT NULL DEFAULT 35,
+    pm10_warning FLOAT NOT NULL DEFAULT 150,
+    consecutive_readings INT NOT NULL DEFAULT 1,
+    updated_by INT REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 -- Index for spatial queries
 CREATE INDEX IF NOT EXISTS idx_stations_geom ON stations USING GIST(geom);
 CREATE INDEX IF NOT EXISTS idx_wards_geom ON wards USING GIST(geom);
 CREATE INDEX IF NOT EXISTS idx_readings_ts ON readings(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_readings_station ON readings(station_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 -- =============================================
 -- SEED: 6 wards (approximate polygons for Gò Vấp area)
 -- =============================================
@@ -337,16 +358,29 @@ SELECT id,
     (aqi * 1.15)::INT,
     NOW() - INTERVAL '6 hours'
 FROM stations;
--- Default admin user (password: admin123 - change in production!)
--- bcrypt hash of "admin123"
+-- Default admin user (password: 123 - only for local/demo usage)
 INSERT INTO users (username, password_hash, role)
 VALUES (
         'admin',
-        '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW',
+        'plain$123',
         'admin'
     ),
     (
         'officer1',
-        '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW',
+        'plain$123',
         'officer'
+    ),
+    (
+        'viewer1',
+        'plain$123',
+        'viewer'
     ) ON CONFLICT (username) DO NOTHING;
+INSERT INTO alert_thresholds (
+        id,
+        aqi_warning,
+        aqi_danger,
+        pm25_warning,
+        pm10_warning,
+        consecutive_readings
+    )
+VALUES (1, 100, 150, 35, 150, 1) ON CONFLICT (id) DO NOTHING;

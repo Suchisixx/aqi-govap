@@ -1,67 +1,91 @@
-// ═══════════════════════════════════════════
-// DASHBOARD MODULE
-// ═══════════════════════════════════════════
+let tsChart = null;
+let wardChart = null;
+let pieChart = null;
 
-let tsChart = null, wardChart = null, pieChart = null;
+function getDashboardFilters() {
+  return {
+    wardId: Number(document.getElementById('dashboard-ward-filter')?.value || 0) || null,
+    hours: Number(document.getElementById('dashboard-hours')?.value || 24),
+    bucket: document.getElementById('dashboard-bucket')?.value || 'hour',
+  };
+}
 
 async function loadDashboard() {
   try {
-    const [summary, wardRank, stationRank, ts] = await Promise.all([
-      api.dashboard.summary(),
-      api.dashboard.wardRanking(),
-      api.dashboard.stationRanking(5),
-      api.dashboard.timeseries(null, 24),
+    const filters = getDashboardFilters();
+    const [summary, wardRank, stationRank, ts, trends] = await Promise.all([
+      api.dashboard.summary(filters.wardId),
+      api.dashboard.wardRanking(filters.hours),
+      api.dashboard.stationRanking(5, filters.wardId),
+      api.dashboard.timeseries(filters),
+      api.dashboard.trends(filters.hours, filters.wardId),
     ]);
 
     renderStatCards(summary);
+    renderTrendCards(trends);
     renderWardBar(wardRank);
     renderPie(summary);
-    renderTimeseries(ts);
+    renderTimeseries(ts, filters.bucket);
     renderRankTable(stationRank);
-  } catch (e) {
-    console.error('loadDashboard:', e);
+  } catch (error) {
+    console.error('loadDashboard:', error);
+    showToast(`Không tải được dashboard: ${error.message}`, 'error');
   }
 }
 
-function renderStatCards(s) {
-  const avg = parseFloat(s.avg_aqi) || 0;
+function renderStatCards(summary) {
+  const avg = parseFloat(summary.avg_aqi) || 0;
   document.getElementById('stat-cards').innerHTML = `
     <div class="stat-card">
-      <div class="label">AQI Trung bình</div>
-      <div class="value" style="color:${aqiColor(avg)}">${Math.round(avg)}</div>
+      <div class="label">AQI trung bình</div>
+      <div class="value" style="color:${aqiColor(avg)}">${Math.round(avg || 0)}</div>
       <div class="sub">${aqiLabel(avg)}</div>
     </div>
     <div class="stat-card">
-      <div class="label">AQI Cao nhất</div>
-      <div class="value" style="color:${aqiColor(s.max_aqi || 0)}">${s.max_aqi || '–'}</div>
-      <div class="sub">${aqiLabel(s.max_aqi || 0)}</div>
+      <div class="label">AQI cao nhất</div>
+      <div class="value" style="color:${aqiColor(summary.max_aqi || 0)}">${summary.max_aqi || '-'}</div>
+      <div class="sub">${aqiLabel(summary.max_aqi || 0)}</div>
     </div>
     <div class="stat-card">
       <div class="label">Tổng trạm đo</div>
-      <div class="value" style="color:#06b6d4">${s.total_stations}</div>
-      <div class="sub">đang hoạt động</div>
+      <div class="value" style="color:#06b6d4">${summary.total_stations || 0}</div>
+      <div class="sub">Đang được tổng hợp</div>
     </div>
     <div class="stat-card">
-      <div class="label">Cần chú ý</div>
-      <div class="value" style="color:${(s.unhealthy + s.very_unhealthy) > 0 ? '#ff0000' : '#22c55e'}">${s.unhealthy + s.very_unhealthy}</div>
-      <div class="sub">trạm vượt ngưỡng</div>
+      <div class="label">Vượt ngưỡng</div>
+      <div class="value" style="color:${(summary.unhealthy + summary.very_unhealthy) > 0 ? '#ff6b6b' : '#22c55e'}">${(summary.unhealthy || 0) + (summary.very_unhealthy || 0)}</div>
+      <div class="sub">Cần theo dõi</div>
     </div>
   `;
+}
+
+function renderTrendCards(trends) {
+  const cards = [
+    ['AQI trung bình', trends.current.avg_aqi, trends.delta.avg_aqi],
+    ['PM2.5 TB', trends.current.avg_pm25, trends.delta.avg_pm25],
+    ['PM10 TB', trends.current.avg_pm10, trends.delta.avg_pm10],
+  ];
+  document.getElementById('trend-cards').innerHTML = cards.map(([label, value, delta]) => `
+    <div class="trend-card">
+      <div class="label">${label}</div>
+      <div class="value">${formatNumber(value)}</div>
+      <div class="sub">So với kỳ trước: ${delta == null ? '-' : `${delta > 0 ? '+' : ''}${formatNumber(delta)}`}</div>
+    </div>
+  `).join('');
 }
 
 function renderWardBar(wards) {
   const ctx = document.getElementById('chart-ward-bar').getContext('2d');
   if (wardChart) wardChart.destroy();
-
   wardChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: wards.map(w => w.name),
+      labels: wards.map((item) => item.name),
       datasets: [{
         label: 'AQI trung bình',
-        data: wards.map(w => parseFloat(w.avg_aqi) || 0),
-        backgroundColor: wards.map(w => aqiColor(parseFloat(w.avg_aqi) || 0) + 'cc'),
-        borderColor: wards.map(w => aqiColor(parseFloat(w.avg_aqi) || 0)),
+        data: wards.map((item) => parseFloat(item.avg_aqi) || 0),
+        backgroundColor: wards.map((item) => `${aqiColor(parseFloat(item.avg_aqi) || 0)}cc`),
+        borderColor: wards.map((item) => aqiColor(parseFloat(item.avg_aqi) || 0)),
         borderWidth: 2,
         borderRadius: 4,
       }],
@@ -77,22 +101,15 @@ function renderWardBar(wards) {
   });
 }
 
-function renderPie(s) {
+function renderPie(summary) {
   const ctx = document.getElementById('chart-pie').getContext('2d');
   if (pieChart) pieChart.destroy();
-
   pieChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Tốt (0-50)', 'Trung bình (51-100)', 'Kém (101-150)', 'Xấu (151-200)', 'Rất xấu (>200)'],
+      labels: ['Tốt', 'Trung bình', 'Kém', 'Xấu', 'Rất xấu'],
       datasets: [{
-        data: [
-          s.good,
-          s.moderate,
-          s.unhealthy_sensitive,
-          s.unhealthy,
-          s.very_unhealthy,
-        ],
+        data: [summary.good, summary.moderate, summary.unhealthy_sensitive, summary.unhealthy, summary.very_unhealthy],
         backgroundColor: ['#00e400cc', '#ffff00cc', '#ff7e00cc', '#ff0000cc', '#8f3f97cc'],
         borderColor: ['#00e400', '#ffff00', '#ff7e00', '#ff0000', '#8f3f97'],
         borderWidth: 2,
@@ -102,20 +119,21 @@ function renderPie(s) {
       responsive: true,
       cutout: '55%',
       plugins: {
-        legend: {
-          position: 'right',
-          labels: { color: '#d8dce8', font: { size: 11 }, boxWidth: 12, padding: 8 },
-        },
+        legend: { position: 'right', labels: { color: '#d8dce8', font: { size: 11 }, boxWidth: 12, padding: 8 } },
       },
     },
   });
 }
 
-function renderTimeseries(data) {
+function renderTimeseries(data, bucket) {
   const ctx = document.getElementById('chart-timeseries').getContext('2d');
   if (tsChart) tsChart.destroy();
-
-  const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+  const labels = data.map((item) => {
+    const date = new Date(item.timestamp);
+    return bucket === 'day'
+      ? date.toLocaleDateString('vi-VN')
+      : date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  });
 
   tsChart = new Chart(ctx, {
     type: 'line',
@@ -124,23 +142,23 @@ function renderTimeseries(data) {
       datasets: [
         {
           label: 'PM2.5',
-          data: data.map(d => d.pm25),
+          data: data.map((item) => item.pm25),
           borderColor: '#06b6d4',
           backgroundColor: '#06b6d420',
           borderWidth: 2,
-          tension: 0.4,
+          tension: 0.35,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 2,
         },
         {
           label: 'PM10',
-          data: data.map(d => d.pm10),
+          data: data.map((item) => item.pm10),
           borderColor: '#f97316',
           backgroundColor: '#f9731620',
           borderWidth: 2,
-          tension: 0.4,
+          tension: 0.35,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 2,
         },
       ],
     },
@@ -160,15 +178,15 @@ function renderTimeseries(data) {
 
 function renderRankTable(stations) {
   const tbody = document.querySelector('#rank-table tbody');
-  tbody.innerHTML = stations.map((s, i) => `
+  tbody.innerHTML = stations.map((station, index) => `
     <tr>
-      <td><strong>${i + 1}</strong></td>
-      <td><strong>${s.name}</strong></td>
-      <td>${s.ward_name}</td>
-      <td style="font-family:'IBM Plex Mono',monospace">${s.pm25 ?? '–'}</td>
-      <td style="font-family:'IBM Plex Mono',monospace">${s.pm10 ?? '–'}</td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:${aqiColor(s.aqi || 0)}">${s.aqi}</td>
-      <td>${aqiChip(s.aqi)}</td>
+      <td><strong>${index + 1}</strong></td>
+      <td><strong>${station.name}</strong></td>
+      <td>${station.ward_name}</td>
+      <td style="font-family:'IBM Plex Mono',monospace">${station.pm25 ?? '-'}</td>
+      <td style="font-family:'IBM Plex Mono',monospace">${station.pm10 ?? '-'}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:${aqiColor(station.aqi || 0)}">${station.aqi}</td>
+      <td>${aqiChip(station.aqi)}</td>
     </tr>
   `).join('');
 }
